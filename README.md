@@ -15,6 +15,8 @@ A desktop application built with Electron, React, and TypeScript for monitoring 
   - Connect to Modbus TCP devices
   - Configurable device ID, register address, and register type
   - Real-time register value monitoring
+  - Automatic disconnect detection and reconnection
+  - Connection status indicators (Connected/Reconnecting)
   - Live charts showing register values over time
   - CSV data logging for historical analysis
 

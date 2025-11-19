@@ -120,6 +120,13 @@ Your CSV files are stored at:
 - Verify the firewall isn't blocking port 502
 - Try using a Modbus testing tool to verify the device is responding
 
+### Modbus Connection Keeps Dropping
+- The application automatically detects disconnections after 3 consecutive errors
+- When a disconnect is detected, it will show "Reconnecting..." status
+- Automatic reconnection attempts occur every 5 seconds
+- Connection will resume automatically when the device is back online
+- All data during disconnections is logged as errors in the CSV file
+
 ### CSV Files Not Saving
 - Check that the application has write permissions to the user data directory
 - Look for error messages in the developer console (View → Toggle Developer Tools)

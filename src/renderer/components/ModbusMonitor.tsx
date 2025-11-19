@@ -30,6 +30,7 @@ interface ActiveSession {
   data: ModbusData[];
   stats: ModbusStats;
   connected: boolean;
+  reconnecting: boolean;
 }
 
 const ModbusMonitor: React.FC = () => {
@@ -46,7 +47,7 @@ const ModbusMonitor: React.FC = () => {
 
   useEffect(() => {
     const handleModbusData = (event: any, payload: any) => {
-      const { sessionId, record, stats } = payload;
+      const { sessionId, record, stats, connected } = payload;
       
       setSessions((prev) => {
         const newSessions = new Map(prev);
@@ -54,6 +55,9 @@ const ModbusMonitor: React.FC = () => {
         if (session) {
           session.data.push(record);
           session.stats = stats;
+          if (connected !== undefined) {
+            session.connected = connected;
+          }
           newSessions.set(sessionId, { ...session });
         }
         return newSessions;
@@ -83,14 +87,46 @@ const ModbusMonitor: React.FC = () => {
       });
     };
 
+    const handleModbusDisconnected = (event: any, payload: any) => {
+      const { sessionId } = payload;
+      setSessions((prev) => {
+        const newSessions = new Map(prev);
+        const session = newSessions.get(sessionId);
+        if (session) {
+          session.connected = false;
+          session.reconnecting = true;
+          newSessions.set(sessionId, { ...session });
+        }
+        return newSessions;
+      });
+    };
+
+    const handleModbusReconnected = (event: any, payload: any) => {
+      const { sessionId } = payload;
+      setSessions((prev) => {
+        const newSessions = new Map(prev);
+        const session = newSessions.get(sessionId);
+        if (session) {
+          session.connected = true;
+          session.reconnecting = false;
+          newSessions.set(sessionId, { ...session });
+        }
+        return newSessions;
+      });
+    };
+
     ipcRenderer.on('modbus:data', handleModbusData);
     ipcRenderer.on('modbus:connected', handleModbusConnected);
     ipcRenderer.on('modbus:error', handleModbusError);
+    ipcRenderer.on('modbus:disconnected', handleModbusDisconnected);
+    ipcRenderer.on('modbus:reconnected', handleModbusReconnected);
 
     return () => {
       ipcRenderer.removeListener('modbus:data', handleModbusData);
       ipcRenderer.removeListener('modbus:connected', handleModbusConnected);
       ipcRenderer.removeListener('modbus:error', handleModbusError);
+      ipcRenderer.removeListener('modbus:disconnected', handleModbusDisconnected);
+      ipcRenderer.removeListener('modbus:reconnected', handleModbusReconnected);
     };
   }, []);
 
@@ -110,7 +146,8 @@ const ModbusMonitor: React.FC = () => {
         errors: 0,
         lastValue: null
       },
-      connected: false
+      connected: false,
+      reconnecting: false
     };
 
     setSessions((prev) => new Map(prev).set(sessionId, newSession));
@@ -196,7 +233,11 @@ const ModbusMonitor: React.FC = () => {
                 <div className="stat-item">
                   <div className="stat-label">Connection Status</div>
                   <div className={`stat-value ${currentSession.connected ? 'success' : 'error'}`}>
-                    {currentSession.connected ? 'Connected' : 'Connecting...'}
+                    {currentSession.reconnecting 
+                      ? 'Reconnecting...' 
+                      : currentSession.connected 
+                        ? 'Connected' 
+                        : 'Connecting...'}
                   </div>
                 </div>
                 <div className="stat-item">
