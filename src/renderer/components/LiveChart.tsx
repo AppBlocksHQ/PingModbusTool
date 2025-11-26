@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -21,13 +21,40 @@ interface LiveChartProps {
   dataKey: string;
   yAxisLabel: string;
   lineColor?: string;
+  maxDataPoints?: number; // Maximum number of data points to display
 }
 
-const LiveChart: React.FC<LiveChartProps> = ({
+// Memoized custom tooltip for better performance
+const CustomTooltip = React.memo(({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        padding: '8px 12px',
+        border: '1px solid #ccc',
+        borderRadius: '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      }}>
+        <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: 'bold' }}>{label}</p>
+        {payload.map((entry: any, index: number) => (
+          <p key={index} style={{ margin: 0, fontSize: '12px', color: entry.color }}>
+            {entry.name}: {entry.value !== undefined ? entry.value.toFixed(2) : 'N/A'}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+});
+
+CustomTooltip.displayName = 'CustomTooltip';
+
+const LiveChart: React.FC<LiveChartProps> = React.memo(({
   data,
   dataKey,
   yAxisLabel,
-  lineColor = '#667eea'
+  lineColor = '#667eea',
+  maxDataPoints = 1000 // Default to last 1000 points
 }) => {
   const [refAreaLeft, setRefAreaLeft] = useState<string | null>(null);
   const [refAreaRight, setRefAreaRight] = useState<string | null>(null);
@@ -35,18 +62,71 @@ const LiveChart: React.FC<LiveChartProps> = ({
   const [right, setRight] = useState<string>('dataMax');
   const [isZoomed, setIsZoomed] = useState(false);
 
-  const formatTime = (timestamp: string) => {
+  const formatTime = useCallback((timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString();
-  };
+    return date.toLocaleString();
+  }, []);
 
-  const chartData = data.map((point) => ({
-    time: formatTime(point.timestamp),
-    [dataKey]: point.value !== null ? point.value : undefined
-  }));
+  // Intelligent downsampling function that preserves visual characteristics
+  const downsampleData = useCallback((points: DataPoint[], maxPoints: number) => {
+    if (points.length <= maxPoints) {
+      return points; // No need to downsample
+    }
 
-  // Filter data based on zoom range
-  const getFilteredData = () => {
+    const bucketSize = Math.ceil(points.length / maxPoints);
+    const downsampled: DataPoint[] = [];
+
+    for (let i = 0; i < points.length; i += bucketSize) {
+      const bucket = points.slice(i, i + bucketSize);
+      
+      // For each bucket, keep the point that best represents the data
+      // We'll use a simple approach: keep min, max, and last point to preserve spikes
+      const validPoints = bucket.filter(p => p.value !== null);
+      
+      if (validPoints.length === 0) {
+        downsampled.push(bucket[bucket.length - 1]); // Keep last point even if null
+      } else if (validPoints.length === 1) {
+        downsampled.push(validPoints[0]);
+      } else {
+        // Find min and max in bucket
+        const minPoint = validPoints.reduce((min, p) => 
+          (p.value !== null && (min.value === null || p.value < min.value)) ? p : min
+        );
+        const maxPoint = validPoints.reduce((max, p) => 
+          (p.value !== null && (max.value === null || p.value > max.value)) ? p : max
+        );
+        const lastPoint = bucket[bucket.length - 1];
+
+        // Add unique points (min, max, last) in chronological order
+        const bucketPoints = new Set<DataPoint>();
+        bucketPoints.add(minPoint);
+        bucketPoints.add(maxPoint);
+        bucketPoints.add(lastPoint);
+        
+        // Sort by original index to maintain chronological order
+        const sortedBucketPoints = Array.from(bucketPoints).sort((a, b) => 
+          bucket.indexOf(a) - bucket.indexOf(b)
+        );
+        downsampled.push(...sortedBucketPoints);
+      }
+    }
+
+    return downsampled;
+  }, []);
+
+  // Memoize chart data transformation with intelligent downsampling
+  const chartData = useMemo(() => {
+    // Apply downsampling to entire dataset while preserving time range
+    const sampledData = downsampleData(data, maxDataPoints);
+    
+    return sampledData.map((point) => ({
+      time: formatTime(point.timestamp),
+      [dataKey]: point.value !== null ? point.value : undefined
+    }));
+  }, [data, dataKey, formatTime, maxDataPoints, downsampleData]);
+
+  // Memoize filtered data based on zoom range
+  const filteredData = useMemo(() => {
     if (left === 'dataMin' && right === 'dataMax') {
       return chartData;
     }
@@ -59,11 +139,9 @@ const LiveChart: React.FC<LiveChartProps> = ({
     }
 
     return chartData.slice(leftIndex, rightIndex + 1);
-  };
+  }, [chartData, left, right]);
 
-  const filteredData = getFilteredData();
-
-  const handleMouseDown = (e: any) => {
+  const handleMouseDown = useCallback((e: any) => {
     if (e && e.activeLabel) {
       // Prevent text selection and other default behaviors
       if (e.nativeEvent) {
@@ -73,9 +151,9 @@ const LiveChart: React.FC<LiveChartProps> = ({
       setRefAreaLeft(e.activeLabel);
       setRefAreaRight(e.activeLabel);
     }
-  };
+  }, []);
 
-  const handleMouseMove = (e: any) => {
+  const handleMouseMove = useCallback((e: any) => {
     if (refAreaLeft && e && e.activeLabel) {
       // Prevent text selection and other default behaviors
       if (e.nativeEvent) {
@@ -84,9 +162,9 @@ const LiveChart: React.FC<LiveChartProps> = ({
       }
       setRefAreaRight(e.activeLabel);
     }
-  };
+  }, [refAreaLeft]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     if (refAreaLeft && refAreaRight) {
       // Determine the zoom range
       let leftIndex = chartData.findIndex((d) => d.time === refAreaLeft);
@@ -112,23 +190,23 @@ const LiveChart: React.FC<LiveChartProps> = ({
       setRefAreaLeft(null);
       setRefAreaRight(null);
     }
-  };
+  }, [refAreaLeft, refAreaRight, chartData]);
 
-  const handleMouseLeave = () => {
+  const handleMouseLeave = useCallback(() => {
     // If user drags outside chart, clear the reference area
     if (refAreaLeft) {
       setRefAreaLeft(null);
       setRefAreaRight(null);
     }
-  };
+  }, [refAreaLeft]);
 
-  const handleResetZoom = () => {
+  const handleResetZoom = useCallback(() => {
     setLeft('dataMin');
     setRight('dataMax');
     setIsZoomed(false);
     setRefAreaLeft(null);
     setRefAreaRight(null);
-  };
+  }, []);
 
   return (
     <div 
@@ -169,7 +247,7 @@ const LiveChart: React.FC<LiveChartProps> = ({
           Reset Zoom
         </button>
       )}
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" debounce={50}>
         <LineChart
           data={filteredData}
           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
@@ -184,13 +262,14 @@ const LiveChart: React.FC<LiveChartProps> = ({
             dataKey="time"
             tick={{ fontSize: 12 }}
             interval="preserveStartEnd"
+            minTickGap={50}
           />
           <YAxis
             label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }}
             tick={{ fontSize: 12 }}
             domain={['auto', 'auto']}
           />
-          <Tooltip />
+          <Tooltip content={<CustomTooltip />} />
           <Legend />
           <Line
             type="monotone"
@@ -214,7 +293,9 @@ const LiveChart: React.FC<LiveChartProps> = ({
       </ResponsiveContainer>
     </div>
   );
-};
+});
+
+LiveChart.displayName = 'LiveChart';
 
 export default LiveChart;
 

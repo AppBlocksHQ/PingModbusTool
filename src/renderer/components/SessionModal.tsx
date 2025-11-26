@@ -1,6 +1,8 @@
 import React from 'react';
 import LiveChart from './LiveChart';
 
+const { ipcRenderer } = window.require('electron');
+
 interface SessionModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -93,6 +95,22 @@ const SessionModal: React.FC<SessionModalProps> = ({
     }
   };
 
+  const handleExport = async () => {
+    try {
+      const result = await ipcRenderer.invoke('storage:export-session', filename);
+      if (result.success) {
+        alert(`Session exported successfully to:\n${result.path}`);
+      } else {
+        if (result.error !== 'Export canceled') {
+          alert(`Failed to export session:\n${result.error}`);
+        }
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Failed to export session. Please try again.');
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -175,6 +193,9 @@ const SessionModal: React.FC<SessionModalProps> = ({
         <div className="modal-footer">
           <button className="btn btn-danger" onClick={handleDelete}>
             Delete Session
+          </button>
+          <button className="btn btn-secondary" onClick={handleExport}>
+            Export Session
           </button>
           <button className="btn btn-primary" onClick={onClose}>
             Close

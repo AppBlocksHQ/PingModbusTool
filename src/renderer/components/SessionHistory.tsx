@@ -26,6 +26,18 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
     loadSessions();
   }, [type, activeSessions]);
 
+  const extractTimestamp = (filename: string): Date => {
+    // Extract timestamp from filename
+    // Format: ping_ip_timestamp.csv or modbus_ip_deviceId_registerAddress_timestamp.csv
+    const match = filename.match(/_(\d{4}-\d{2}-\d{2}T[\d-]+Z)\.csv$/);
+    if (match) {
+      // Convert back to ISO format (replace hyphens with colons and dots where needed)
+      const isoString = match[1].replace(/T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/, 'T$1:$2:$3.$4Z');
+      return new Date(isoString);
+    }
+    return new Date(0); // Return epoch if no match (shouldn't happen)
+  };
+
   const loadSessions = async () => {
     try {
       const allSessions = await ipcRenderer.invoke('storage:list-sessions');
@@ -36,7 +48,13 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
           isActive: activeSessions.has(filename)
         })
       );
-      setSessions(sessionList.reverse()); // Most recent first
+      // Sort by timestamp (most recent first)
+      sessionList.sort((a: Session, b: Session) => {
+        const timeA = extractTimestamp(a.filename);
+        const timeB = extractTimestamp(b.filename);
+        return timeB.getTime() - timeA.getTime();
+      });
+      setSessions(sessionList);
     } catch (error) {
       console.error('Failed to load sessions:', error);
     }
@@ -84,10 +102,36 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
     setSessionData([]);
   };
 
+  const handleImport = async () => {
+    try {
+      const result = await ipcRenderer.invoke('storage:import-session');
+      if (result.success) {
+        alert(`Session imported successfully:\n${result.filename}`);
+        loadSessions(); // Reload the session list
+      } else {
+        if (result.error !== 'Import canceled') {
+          alert(`Failed to import session:\n${result.error}`);
+        }
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('Failed to import session. Please try again.');
+    }
+  };
+
   return (
     <>
     <div className="card">
-      <h3>Session History</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h3 style={{ margin: 0 }}>Session History</h3>
+        <button 
+          className="btn btn-secondary" 
+          onClick={handleImport}
+          style={{ fontSize: '14px', padding: '6px 12px' }}
+        >
+          Import Session
+        </button>
+      </div>
       {sessions.length === 0 ? (
         <div className="empty-state">
           <p>No sessions yet</p>

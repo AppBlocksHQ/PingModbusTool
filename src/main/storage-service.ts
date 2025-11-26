@@ -137,5 +137,33 @@ export class StorageService {
       fs.unlinkSync(filepath);
     }
   }
+
+  exportSession(filename: string, destinationPath: string): void {
+    const sourcePath = path.join(this.sessionsDir, filename);
+    if (fs.existsSync(sourcePath)) {
+      fs.copyFileSync(sourcePath, destinationPath);
+    } else {
+      throw new Error('Session file not found');
+    }
+  }
+
+  importSession(sourcePath: string): string {
+    const filename = path.basename(sourcePath);
+    
+    // Validate filename format
+    if (!filename.endsWith('.csv') || (!filename.startsWith('ping_') && !filename.startsWith('modbus_'))) {
+      throw new Error('Invalid session file format');
+    }
+    
+    const destinationPath = path.join(this.sessionsDir, filename);
+    
+    // Check if file already exists
+    if (fs.existsSync(destinationPath)) {
+      throw new Error('A session with this filename already exists');
+    }
+    
+    fs.copyFileSync(sourcePath, destinationPath);
+    return filename;
+  }
 }
 

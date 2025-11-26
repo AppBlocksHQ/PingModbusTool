@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import { PingService } from './ping-service';
 import { ModbusService } from './modbus-service';
@@ -94,5 +94,53 @@ ipcMain.handle('storage:read-modbus-session', async (event, filename) => {
 
 ipcMain.handle('storage:delete-session', async (event, filename) => {
   storageService.deleteSession(filename);
+});
+
+ipcMain.handle('storage:export-session', async (event, filename) => {
+  if (!mainWindow) return;
+  
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export Session',
+    defaultPath: filename,
+    filters: [
+      { name: 'CSV Files', extensions: ['csv'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  
+  if (!result.canceled && result.filePath) {
+    try {
+      storageService.exportSession(filename, result.filePath);
+      return { success: true, path: result.filePath };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
+  
+  return { success: false, error: 'Export canceled' };
+});
+
+ipcMain.handle('storage:import-session', async () => {
+  if (!mainWindow) return;
+  
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import Session',
+    filters: [
+      { name: 'CSV Files', extensions: ['csv'] },
+      { name: 'All Files', extensions: ['*'] }
+    ],
+    properties: ['openFile']
+  });
+  
+  if (!result.canceled && result.filePaths.length > 0) {
+    try {
+      const filename = storageService.importSession(result.filePaths[0]);
+      return { success: true, filename };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  }
+  
+  return { success: false, error: 'Import canceled' };
 });
 
