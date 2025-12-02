@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import LiveChart from './LiveChart';
 
 const { ipcRenderer } = window.require('electron');
@@ -22,7 +22,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const getChartData = () => {
+  const chartData = useMemo(() => {
     if (sessionType === 'ping') {
       return data.map((record) => ({
         timestamp: record.timestamp,
@@ -34,23 +34,35 @@ const SessionModal: React.FC<SessionModalProps> = ({
         value: record.value
       }));
     }
-  };
+  }, [data, sessionType]);
 
-  const calculateStats = () => {
+  const stats = useMemo(() => {
     if (sessionType === 'ping') {
       const validRecords = data.filter(r => r.response_time_ms !== null);
       const totalRecords = data.length;
       const successfulRecords = validRecords.length;
       const failedRecords = totalRecords - successfulRecords;
-      const avgResponseTime = successfulRecords > 0
-        ? validRecords.reduce((sum, r) => sum + r.response_time_ms, 0) / successfulRecords
-        : 0;
-      const minResponseTime = successfulRecords > 0
-        ? Math.min(...validRecords.map(r => r.response_time_ms))
-        : 0;
-      const maxResponseTime = successfulRecords > 0
-        ? Math.max(...validRecords.map(r => r.response_time_ms))
-        : 0;
+      
+      let avgResponseTime = 0;
+      let minResponseTime = 0;
+      let maxResponseTime = 0;
+      
+      if (successfulRecords > 0) {
+        let sum = 0;
+        let min = Infinity;
+        let max = -Infinity;
+        
+        for (const record of validRecords) {
+          const time = record.response_time_ms;
+          sum += time;
+          if (time < min) min = time;
+          if (time > max) max = time;
+        }
+        
+        avgResponseTime = sum / successfulRecords;
+        minResponseTime = min;
+        maxResponseTime = max;
+      }
 
       return {
         totalRecords,
@@ -66,15 +78,27 @@ const SessionModal: React.FC<SessionModalProps> = ({
       const totalRecords = data.length;
       const successfulRecords = validRecords.length;
       const failedRecords = totalRecords - successfulRecords;
-      const avgValue = successfulRecords > 0
-        ? validRecords.reduce((sum, r) => sum + r.value, 0) / successfulRecords
-        : 0;
-      const minValue = successfulRecords > 0
-        ? Math.min(...validRecords.map(r => r.value))
-        : 0;
-      const maxValue = successfulRecords > 0
-        ? Math.max(...validRecords.map(r => r.value))
-        : 0;
+      
+      let avgValue = 0;
+      let minValue = 0;
+      let maxValue = 0;
+      
+      if (successfulRecords > 0) {
+        let sum = 0;
+        let min = Infinity;
+        let max = -Infinity;
+        
+        for (const record of validRecords) {
+          const value = record.value;
+          sum += value;
+          if (value < min) min = value;
+          if (value > max) max = value;
+        }
+        
+        avgValue = sum / successfulRecords;
+        minValue = min;
+        maxValue = max;
+      }
 
       return {
         totalRecords,
@@ -85,9 +109,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
         maxValue: maxValue.toFixed(2)
       };
     }
-  };
-
-  const stats = calculateStats();
+  }, [data, sessionType]);
 
   const handleDelete = () => {
     if (window.confirm(`Are you sure you want to delete this session?\n\n${filename}\n\nThis action cannot be undone.`)) {
@@ -181,7 +203,7 @@ const SessionModal: React.FC<SessionModalProps> = ({
             <h3>Chart</h3>
             <div style={{ height: 'calc(100% - 40px)' }}>
               <LiveChart
-                data={getChartData()}
+                data={chartData}
                 dataKey={sessionType === 'ping' ? 'Response Time (ms)' : 'Value'}
                 yAxisLabel={sessionType === 'ping' ? 'Response Time (ms)' : 'Register Value'}
                 lineColor={sessionType === 'ping' ? '#667eea' : '#27ae60'}

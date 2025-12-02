@@ -165,5 +165,20 @@ export class StorageService {
     fs.copyFileSync(sourcePath, destinationPath);
     return filename;
   }
+
+  async getRecordCount(filename: string): Promise<number> {
+    const filepath = path.join(this.sessionsDir, filename);
+    
+    return new Promise((resolve, reject) => {
+      let count = 0;
+      fs.createReadStream(filepath)
+        .pipe(csvParser())
+        .on('data', () => {
+          count++;
+        })
+        .on('end', () => resolve(count))
+        .on('error', reject);
+    });
+  }
 }
 

@@ -144,3 +144,7 @@ ipcMain.handle('storage:import-session', async () => {
   return { success: false, error: 'Import canceled' };
 });
 
+ipcMain.handle('storage:get-record-count', async (event, filename) => {
+  return await storageService.getRecordCount(filename);
+});
+

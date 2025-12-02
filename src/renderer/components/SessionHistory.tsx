@@ -8,6 +8,7 @@ interface Session {
   filename: string;
   type: 'ping' | 'modbus';
   isActive: boolean;
+  recordCount?: number;
 }
 
 interface SessionHistoryProps {
@@ -54,7 +55,21 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
         const timeB = extractTimestamp(b.filename);
         return timeB.getTime() - timeA.getTime();
       });
-      setSessions(sessionList);
+      
+      // Load record counts for each session
+      const sessionsWithCounts = await Promise.all(
+        sessionList.map(async (session: Session) => {
+          try {
+            const count = await ipcRenderer.invoke('storage:get-record-count', session.filename);
+            return { ...session, recordCount: count };
+          } catch (error) {
+            console.error(`Failed to load record count for ${session.filename}:`, error);
+            return session;
+          }
+        })
+      );
+      
+      setSessions(sessionsWithCounts);
     } catch (error) {
       console.error('Failed to load sessions:', error);
     }
@@ -146,6 +161,7 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
                 isActive={session.isActive}
                 isSelected={selectedSession === session.filename}
                 onClick={() => handleSessionSelect(session.filename)}
+                recordCount={session.recordCount}
               />
             ))}
           </div>

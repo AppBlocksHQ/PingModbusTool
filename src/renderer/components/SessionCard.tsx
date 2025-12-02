@@ -5,13 +5,15 @@ interface SessionCardProps {
   isActive: boolean;
   isSelected: boolean;
   onClick: () => void;
+  recordCount?: number;
 }
 
 const SessionCard: React.FC<SessionCardProps> = ({
   filename,
   isActive,
   isSelected,
-  onClick
+  onClick,
+  recordCount
 }) => {
   const parseFilename = (filename: string) => {
     // Extract info from filename
@@ -63,7 +65,14 @@ const SessionCard: React.FC<SessionCardProps> = ({
         <span className={`status-indicator ${isActive ? 'active' : 'stopped'}`}></span>
         {info}
       </div>
-      <div className="session-meta">{formatTimestamp(timestamp)}</div>
+      <div className="session-meta">
+        {formatTimestamp(timestamp)}
+        {recordCount !== undefined && (
+          <span style={{ marginLeft: '8px', color: '#888', fontSize: '12px' }}>
+            • {recordCount.toLocaleString()} record{recordCount !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
     </div>
   );
 };
