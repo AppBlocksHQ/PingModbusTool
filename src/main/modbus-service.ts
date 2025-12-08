@@ -51,12 +51,18 @@ export class ModbusService {
     console.log(`Attempting to reconnect Modbus session ${sessionId}...`);
 
     try {
-      // Close old connection
-      try {
-        session.client.close(() => {});
-      } catch (error) {
-        // Ignore close errors
-      }
+      // Close old connection and wait for it to complete
+      await new Promise<void>((resolve) => {
+        try {
+          session.client.close(() => {
+            resolve();
+          });
+          // Timeout in case close callback never fires
+          setTimeout(resolve, 1000);
+        } catch (error) {
+          resolve();
+        }
+      });
 
       // Create new client
       const client = new ModbusRTU();
@@ -214,12 +220,19 @@ export class ModbusService {
       session.active = false;
       
       try {
-        session.client.close(() => {
-          console.log(`Stopped Modbus session ${sessionId}`);
+        await new Promise<void>((resolve) => {
+          session.client.close(() => {
+            console.log(`Stopped Modbus session ${sessionId}`);
+            resolve();
+          });
+          // Timeout in case close callback never fires
+          setTimeout(resolve, 1000);
         });
       } catch (error) {
         console.error('Error closing Modbus connection:', error);
       }
+      
+      this.sessions.delete(sessionId);
     }
   }
 
@@ -228,18 +241,31 @@ export class ModbusService {
   }
 
   async stopAll(): Promise<void> {
+    const closePromises: Promise<void>[] = [];
+    
     this.sessions.forEach((session) => {
       if (session.interval) {
         clearInterval(session.interval);
+        session.interval = null;
       }
-      try {
-        session.client.close(() => {
-          // Connection closed
-        });
-      } catch (error) {
-        console.error('Error closing Modbus connection:', error);
-      }
+      session.active = false;
+      
+      const closePromise = new Promise<void>((resolve) => {
+        try {
+          session.client.close(() => {
+            resolve();
+          });
+          // Timeout in case close callback never fires
+          setTimeout(resolve, 1000);
+        } catch (error) {
+          console.error('Error closing Modbus connection:', error);
+          resolve();
+        }
+      });
+      closePromises.push(closePromise);
     });
+    
+    await Promise.all(closePromises);
     this.sessions.clear();
   }
 }

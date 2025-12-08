@@ -85,7 +85,8 @@ export class StorageService {
     const records: PingRecord[] = [];
 
     return new Promise((resolve, reject) => {
-      fs.createReadStream(filepath)
+      const stream = fs.createReadStream(filepath);
+      stream
         .pipe(csvParser())
         .on('data', (row: any) => {
           records.push({
@@ -96,7 +97,10 @@ export class StorageService {
           });
         })
         .on('end', () => resolve(records))
-        .on('error', reject);
+        .on('error', (err) => {
+          stream.destroy();
+          reject(err);
+        });
     });
   }
 
@@ -105,7 +109,8 @@ export class StorageService {
     const records: ModbusRecord[] = [];
 
     return new Promise((resolve, reject) => {
-      fs.createReadStream(filepath)
+      const stream = fs.createReadStream(filepath);
+      stream
         .pipe(csvParser())
         .on('data', (row: any) => {
           records.push({
@@ -118,7 +123,10 @@ export class StorageService {
           });
         })
         .on('end', () => resolve(records))
-        .on('error', reject);
+        .on('error', (err) => {
+          stream.destroy();
+          reject(err);
+        });
     });
   }
 
@@ -171,13 +179,17 @@ export class StorageService {
     
     return new Promise((resolve, reject) => {
       let count = 0;
-      fs.createReadStream(filepath)
+      const stream = fs.createReadStream(filepath);
+      stream
         .pipe(csvParser())
         .on('data', () => {
           count++;
         })
         .on('end', () => resolve(count))
-        .on('error', reject);
+        .on('error', (err) => {
+          stream.destroy();
+          reject(err);
+        });
     });
   }
 }

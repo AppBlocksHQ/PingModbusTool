@@ -109,10 +109,13 @@ export class PingService {
 
   stopPing(sessionId: string): void {
     const session = this.sessions.get(sessionId);
-    if (session && session.interval) {
-      clearInterval(session.interval);
+    if (session) {
+      if (session.interval) {
+        clearInterval(session.interval);
+        session.interval = null;
+      }
       session.active = false;
-      session.interval = null;
+      this.sessions.delete(sessionId);
       console.log(`Stopped ping session ${sessionId}`);
     }
   }
