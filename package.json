@@ -13,7 +13,12 @@
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:all": "npm run build && electron-builder --mac --win --linux"
   },
-  "keywords": ["electron", "ping", "modbus", "monitoring"],
+  "keywords": [
+    "electron",
+    "ping",
+    "modbus",
+    "monitoring"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -26,6 +31,7 @@
     "recharts": "^2.10.3"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "@types/node": "^20.10.5",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
@@ -56,8 +62,13 @@
         "dmg",
         "zip"
       ],
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
+    "afterSign": "scripts/notarize.js",
     "win": {
       "target": [
         "nsis",
@@ -82,4 +93,3 @@
     }
   }
 }
-
