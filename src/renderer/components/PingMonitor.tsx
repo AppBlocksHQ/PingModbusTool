@@ -29,6 +29,7 @@ const PingMonitor: React.FC = () => {
   const [ipAddress, setIpAddress] = useState('');
   const [sessions, setSessions] = useState<Map<string, ActiveSession>>(new Map());
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
   const sessionCounterRef = useRef(0);
 
   useEffect(() => {
@@ -89,6 +90,8 @@ const PingMonitor: React.FC = () => {
     if (selectedSessionId === sessionId) {
       setSelectedSessionId(null);
     }
+    // Trigger session history refresh to update record counts
+    setHistoryRefreshTrigger(prev => prev + 1);
   };
 
   const currentSession = selectedSessionId ? sessions.get(selectedSessionId) : null;
@@ -213,7 +216,7 @@ const PingMonitor: React.FC = () => {
           )}
         </div>
 
-        <SessionHistory type="ping" activeSessions={activeSessionFilenames} />
+        <SessionHistory type="ping" activeSessions={activeSessionFilenames} refreshTrigger={historyRefreshTrigger} />
       </div>
     </div>
   );

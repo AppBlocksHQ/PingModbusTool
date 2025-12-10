@@ -14,18 +14,15 @@ interface Session {
 interface SessionHistoryProps {
   type: 'ping' | 'modbus';
   activeSessions: Set<string>;
+  refreshTrigger?: number;
 }
 
-const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions }) => {
+const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions, refreshTrigger }) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [sessionData, setSessionData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  useEffect(() => {
-    loadSessions();
-  }, [type, activeSessions]);
 
   const extractTimestamp = (filename: string): Date => {
     // Extract timestamp from filename
@@ -39,7 +36,7 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
     return new Date(0); // Return epoch if no match (shouldn't happen)
   };
 
-  const loadSessions = async () => {
+  const loadSessions = async (loadRecordCounts: boolean = false) => {
     try {
       const allSessions = await ipcRenderer.invoke('storage:list-sessions');
       const sessionList = (type === 'ping' ? allSessions.ping : allSessions.modbus).map(
@@ -56,24 +53,56 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
         return timeB.getTime() - timeA.getTime();
       });
       
-      // Load record counts for each session
-      const sessionsWithCounts = await Promise.all(
-        sessionList.map(async (session: Session) => {
-          try {
-            const count = await ipcRenderer.invoke('storage:get-record-count', session.filename);
-            return { ...session, recordCount: count };
-          } catch (error) {
-            console.error(`Failed to load record count for ${session.filename}:`, error);
-            return session;
-          }
-        })
-      );
-      
-      setSessions(sessionsWithCounts);
+      if (loadRecordCounts) {
+        // Load record counts for each session (only on initial load)
+        const sessionsWithCounts = await Promise.all(
+          sessionList.map(async (session: Session) => {
+            try {
+              const count = await ipcRenderer.invoke('storage:get-record-count', session.filename);
+              return { ...session, recordCount: count };
+            } catch (error) {
+              console.error(`Failed to load record count for ${session.filename}:`, error);
+              return session;
+            }
+          })
+        );
+        setSessions(sessionsWithCounts);
+      } else {
+        // Just update the session list, preserving existing record counts
+        setSessions(prevSessions => {
+          const countMap = new Map(prevSessions.map(s => [s.filename, s.recordCount]));
+          return sessionList.map((session: Session) => ({
+            ...session,
+            recordCount: countMap.get(session.filename)
+          }));
+        });
+      }
     } catch (error) {
       console.error('Failed to load sessions:', error);
     }
   };
+
+  // Load sessions with record counts only on initial mount or when type changes
+  useEffect(() => {
+    loadSessions(true);
+  }, [type]);
+
+  // Update isActive status when activeSessions changes (without re-fetching record counts)
+  useEffect(() => {
+    setSessions(prevSessions => 
+      prevSessions.map(session => ({
+        ...session,
+        isActive: activeSessions.has(session.filename)
+      }))
+    );
+  }, [activeSessions]);
+
+  // Refresh sessions with record counts when refreshTrigger changes (e.g., when a session stops)
+  useEffect(() => {
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      loadSessions(true);
+    }
+  }, [refreshTrigger]);
 
   const handleSessionSelect = async (filename: string) => {
     setSelectedSession(filename);
@@ -104,7 +133,7 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
       setIsModalOpen(false);
       setSelectedSession(null);
       setSessionData([]);
-      loadSessions(); // Reload the session list
+      loadSessions(false); // Reload the session list (no need to re-fetch counts)
     } catch (error) {
       console.error('Failed to delete session:', error);
       alert('Failed to delete session. Please try again.');
@@ -122,7 +151,7 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ type, activeSessions })
       const result = await ipcRenderer.invoke('storage:import-session');
       if (result.success) {
         alert(`Session imported successfully:\n${result.filename}`);
-        loadSessions(); // Reload the session list
+        loadSessions(true); // Reload with counts to get the imported session's count
       } else {
         if (result.error !== 'Import canceled') {
           alert(`Failed to import session:\n${result.error}`);
